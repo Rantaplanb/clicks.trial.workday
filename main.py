@@ -21,7 +21,7 @@ from openai import OpenAI
 load_dotenv()
 
 CONTAINER_NAME = "cua-webtop"
-IMAGE = "lscr.io/linuxserver/webtop:debian-xfce"
+IMAGE = "lscr.io/linuxserver/webtop:debian-kde"
 DISPLAY = ":1"
 MAX_STEPS = 30
 
@@ -31,24 +31,23 @@ through screenshots, mouse, and keyboard actions.
 
 # Environment
 
-- Debian Linux, XFCE desktop, 1024x768 resolution.
+- Debian Linux, KDE Plasma desktop, 1024x768 resolution.
 - Display: :1. You are logged in as root.
-- Browser: Chromium (launch via Applications menu or `chromium`).
-- Terminal: xfce4-terminal.
-- File manager: Thunar.
-- Text editor: Mousepad.
+- Browser: Chromium (command: `chromium`).
+- Terminal: Konsole.
+- File manager: Dolphin.
+- Text editor: Kate / KWrite.
 
 # How to open applications
 
-Preferred method: press Alt+F2 to open the Application Finder (a run dialog). \
-Type the app name (e.g. "chromium", "xfce4-terminal", "thunar") and press Enter. \
+Preferred method: press Alt+F2 to open KRunner (the KDE run dialog). \
+Type the app name (e.g. "chromium", "konsole", "dolphin") and press Enter. \
 This is the fastest and most reliable way to launch any application.
 
-Alternative: the XFCE top panel has an "Applications" menu in the top-left corner. \
-Click it to see categories and app launchers.
-- To open the browser: "Applications" → "Web Browser" or "Internet" → "Chromium".
-- To open a terminal: "Applications" → "Terminal Emulator".
-- Right-clicking the desktop does NOT open an app menu in this setup.
+Alternative: click the application launcher icon in the bottom-left corner \
+of the KDE panel (taskbar at the bottom of the screen). \
+Browse or search for applications from there.
+- Right-clicking the desktop does NOT open an app launcher in this setup.
 
 # Interaction guidelines
 
