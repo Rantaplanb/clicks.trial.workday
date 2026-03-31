@@ -1,9 +1,8 @@
 [project]
 name = "clicks-trial-workday"
-version = "0.1.0"
-description = "GPT-5.4 Computer Use Agent running in a Linux desktop container"
+version = "0.2.0"
+description = "GPT-5.4 Computer Use Agent — Kubernetes orchestrated"
 requires-python = ">=3.12"
 dependencies = [
-    "openai>=2.30.0",
-    "python-dotenv>=1.0.0",
+    "requests>=2.32.0",
 ]

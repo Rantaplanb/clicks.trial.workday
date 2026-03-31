@@ -1,0 +1,40 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Orchestrator API
+      - containerPort: 30080
+        hostPort: 8000
+        protocol: TCP
+      # VNC ports for up to 10 concurrent task desktops
+      - containerPort: 30001
+        hostPort: 6901
+        protocol: TCP
+      - containerPort: 30002
+        hostPort: 6902
+        protocol: TCP
+      - containerPort: 30003
+        hostPort: 6903
+        protocol: TCP
+      - containerPort: 30004
+        hostPort: 6904
+        protocol: TCP
+      - containerPort: 30005
+        hostPort: 6905
+        protocol: TCP
+      - containerPort: 30006
+        hostPort: 6906
+        protocol: TCP
+      - containerPort: 30007
+        hostPort: 6907
+        protocol: TCP
+      - containerPort: 30008
+        hostPort: 6908
+        protocol: TCP
+      - containerPort: 30009
+        hostPort: 6909
+        protocol: TCP
+      - containerPort: 30010
+        hostPort: 6910
+        protocol: TCP

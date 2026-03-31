@@ -3,22 +3,89 @@ version: "3"
 dotenv: [".env"]
 
 vars:
-  CONTAINER_NAME: cua-webtop
+  CLUSTER: clicks-cluster
 
 tasks:
-  run:
-    desc: "Run the agent. Usage: task run MSG='open chrome and google weather in SF'"
+  bootstrap-cluster:
+    desc: Create kind cluster, build images, and deploy the orchestrator
     cmds:
-      - uv run python main.py --message "{{.MSG}}"
+      - task: cluster-create
+      - task: build
+      - task: load-images
+      - task: deploy
+
+  cluster-create:
+    desc: Create a kind cluster (idempotent)
+    cmds:
+      - kind create cluster --name {{.CLUSTER}} --config kind-config.yaml
+    status:
+      - kind get clusters | grep -q {{.CLUSTER}}
+
+  build:
+    desc: Build all Docker images
+    cmds:
+      - docker build -t orchestrator:latest ./orchestrator
+      - docker build -t task-runner:latest  ./task-runner
+      - docker build -t webtop:latest       ./webtop
+
+  load-images:
+    desc: Load images into kind
+    cmds:
+      - kind load docker-image orchestrator:latest --name {{.CLUSTER}}
+      - kind load docker-image task-runner:latest  --name {{.CLUSTER}}
+      - kind load docker-image webtop:latest       --name {{.CLUSTER}}
+
+  deploy:
+    desc: Apply k8s manifests and create secrets
+    cmds:
+      - kubectl create secret generic openai-secret
+          --from-literal=api-key=$OPENAI_API_KEY
+          --dry-run=client -o yaml | kubectl apply -f -
+      - kubectl apply -f k8s/rbac.yaml
+      - kubectl apply -f k8s/orchestrator.yaml
+      - kubectl rollout status deployment/orchestrator --timeout=120s
+      - echo ""
+      - echo "Orchestrator ready at http://localhost:8000"
+      - echo "API docs at        http://localhost:8000/docs"
+
+  redeploy:
+    desc: Rebuild, reload, and restart the orchestrator
+    cmds:
+      - task: build
+      - task: load-images
+      - kubectl rollout restart deployment/orchestrator
+      - kubectl rollout status deployment/orchestrator --timeout=120s
+
+  teardown:
+    desc: Delete the kind cluster
+    cmds:
+      - kind delete cluster --name {{.CLUSTER}}
+
+  run:
+    desc: "Submit a task. Usage: task run MSG='open chrome and google weather in SF'"
+    cmds:
+      - python main.py --message "{{.MSG}}"
     requires:
       vars: [MSG]
 
-  clean:
-    desc: Remove all saved screenshots
+  logs-runner:
+    desc: "Tail task-runner logs. Usage: task logs-runner ID=<task-id-prefix>"
     cmds:
-      - rm -rf screenshots/
+      - kubectl logs -f runner-{{.ID}}
+    requires:
+      vars: [ID]
 
-  sync:
-    desc: Install/update dependencies
+  logs-webtop:
+    desc: "Tail webtop logs. Usage: task logs-webtop ID=<task-id-prefix>"
     cmds:
-      - uv sync
+      - kubectl logs -f webtop-{{.ID}}
+    requires:
+      vars: [ID]
+
+  vnc:
+    desc: "Port-forward VNC for a task. Usage: task vnc ID=<task-id-prefix>"
+    cmds:
+      - echo "Open https://localhost:3000 in your browser"
+      - kubectl port-forward webtop-{{.ID}} 3000:3000
+    requires:
+      vars: [ID]
