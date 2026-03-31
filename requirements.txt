@@ -1,2 +1,0 @@
-openai>=2.30.0
-python-dotenv>=1.0.0

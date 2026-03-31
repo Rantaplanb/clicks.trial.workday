@@ -1,0 +1,24 @@
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+  CONTAINER_NAME: cua-webtop
+
+tasks:
+  run:
+    desc: "Run the agent. Usage: task run MSG='open chrome and google weather in SF'"
+    cmds:
+      - uv run python main.py --message "{{.MSG}}"
+    requires:
+      vars: [MSG]
+
+  clean:
+    desc: Remove all saved screenshots
+    cmds:
+      - rm -rf screenshots/
+
+  sync:
+    desc: Install/update dependencies
+    cmds:
+      - uv sync
