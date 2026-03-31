@@ -6,11 +6,7 @@ Usage:
 """
 import argparse
 import base64
-import json
-import os
-import shutil
 import subprocess
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +19,7 @@ load_dotenv()
 CONTAINER_NAME = "cua-webtop"
 IMAGE = "lscr.io/linuxserver/webtop:debian-kde"
 DISPLAY = ":1"
+VNC_PORT = 6080  # view-only noVNC web viewer
 MAX_STEPS = 30
 
 SYSTEM_PROMPT = """\
@@ -97,7 +94,7 @@ def start_container():
     print(f"[container] Starting {IMAGE} ...")
     subprocess.run(
         f"docker run -d --name {CONTAINER_NAME} "
-        f"-p 3001:3000 "
+        f"-p {VNC_PORT}:6080 "
         f"-e PUID=1000 -e PGID=1000 -e TZ=Etc/UTC "
         f"--shm-size=1g "
         f"{IMAGE}",
@@ -107,16 +104,34 @@ def start_container():
     print("[container] Waiting for desktop to initialize ...")
     time.sleep(10)
 
-    # Install imagemagick (needed for screenshots via `import`)
-    print("[container] Installing imagemagick ...")
+    # Install imagemagick (screenshots), x11vnc (view-only VNC), novnc (web viewer)
+    print("[container] Installing imagemagick, x11vnc, novnc ...")
     subprocess.run(
         f"docker exec {CONTAINER_NAME} bash -c "
-        f"'apt-get update -qq && apt-get install -y -qq imagemagick > /dev/null 2>&1'",
+        f"'apt-get update -qq && apt-get install -y -qq imagemagick x11vnc novnc > /dev/null 2>&1'",
         shell=True, check=True, capture_output=True,
     )
 
+    # Start x11vnc in view-only mode (no mouse/keyboard input from viewers)
+    # -noshm required inside Docker (MIT-SHM not available)
+    print("[container] Starting view-only VNC ...")
+    subprocess.run(
+        f"docker exec -d {CONTAINER_NAME} "
+        f"x11vnc -display {DISPLAY} -viewonly -shared -forever -nopw -noshm -rfbport 5900",
+        shell=True, check=True, capture_output=True,
+    )
+    time.sleep(2)
+
+    # Start noVNC web proxy (serves a browser-based viewer on port 6080)
+    subprocess.run(
+        f"docker exec -d {CONTAINER_NAME} bash -c "
+        f"'/usr/share/novnc/utils/novnc_proxy --vnc localhost:5900 --listen 6080 > /dev/null 2>&1'",
+        shell=True, check=True, capture_output=True,
+    )
+    time.sleep(1)
+
     print("[container] Ready!")
-    print(f"[container] VNC web UI: http://localhost:3001")
+    print(f"[container] View-only VNC: http://localhost:{VNC_PORT}/vnc.html")
 
 
 def stop_container():
@@ -371,7 +386,7 @@ def main():
         if not args.keep:
             stop_container()
         else:
-            print(f"\n[container] Left running. VNC: http://localhost:3001")
+            print(f"\n[container] Left running. View-only VNC: http://localhost:{VNC_PORT}/vnc.html")
             print(f"[container] Stop with: docker rm -f {CONTAINER_NAME}")
 
 
