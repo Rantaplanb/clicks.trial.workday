@@ -204,8 +204,8 @@ def _create_vnc_service(task_id: str, node_port: int) -> str:
             selector={"app": "webtop", "task-id": task_id},
             ports=[
                 client.V1ServicePort(
-                    port=3000,
-                    target_port=3000,
+                    port=6080,
+                    target_port=6080,
                     node_port=node_port,
                     name="vnc",
                 ),
@@ -266,7 +266,7 @@ def create_task(req: TaskCreate):
         "webtop_pod": webtop_pod,
         "vnc_port": vnc_port,
         "vnc_svc": vnc_svc,
-        "vnc_url": f"http://localhost:{host_port}",
+        "vnc_url": f"http://localhost:{host_port}/vnc.html",
         "result": None,
         "steps": [],
     }

@@ -5,4 +5,6 @@ RUN apt-get update && \
         chromium \
         imagemagick \
         xdotool \
+        x11vnc \
+        novnc \
     && rm -rf /var/lib/apt/lists/*

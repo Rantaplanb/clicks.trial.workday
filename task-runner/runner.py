@@ -127,22 +127,9 @@ def create_webtop_pod():
                         client.V1EnvVar(name="PUID", value="1000"),
                         client.V1EnvVar(name="PGID", value="1000"),
                         client.V1EnvVar(name="TZ", value="Etc/UTC"),
-                        # View-only: disable interactive features
-                        client.V1EnvVar(
-                            name="SELKIES_ENABLE_VIEW_ONLY_LINK", value="true"
-                        ),
-                        client.V1EnvVar(
-                            name="SELKIES_CLIPBOARD_ENABLED", value="false"
-                        ),
-                        client.V1EnvVar(
-                            name="SELKIES_FILE_TRANSFERS", value="none"
-                        ),
-                        client.V1EnvVar(
-                            name="SELKIES_GAMEPAD_ENABLED", value="false"
-                        ),
                     ],
                     ports=[
-                        client.V1ContainerPort(container_port=3000, name="vnc"),
+                        client.V1ContainerPort(container_port=6080, name="vnc"),
                     ],
                     security_context=client.V1SecurityContext(
                         capabilities=client.V1Capabilities(add=["SYS_ADMIN"]),
@@ -180,12 +167,26 @@ def wait_for_webtop(timeout: int = 180):
             out = _exec(f"DISPLAY={DISPLAY} xdotool getdisplaygeometry")
             if out.strip():
                 print(f"[runner] Display ready: {out.strip()}")
-                return
+                break
         except Exception:
             pass
         time.sleep(5)
+    else:
+        raise TimeoutError("Webtop X display never became ready")
 
-    raise TimeoutError("Webtop X display never became ready")
+    # Phase 3: start view-only VNC (x11vnc + noVNC)
+    print("[runner] Starting view-only VNC ...")
+    _exec(
+        f"x11vnc -display {DISPLAY} -viewonly -shared -forever -nopw -noshm "
+        f"-rfbport 5900 -bg -o /tmp/x11vnc.log"
+    )
+    time.sleep(2)
+    _exec(
+        "/usr/share/novnc/utils/novnc_proxy --vnc localhost:5900 "
+        "--listen 6080 > /dev/null 2>&1 &"
+    )
+    time.sleep(1)
+    print("[runner] View-only VNC ready on port 6080")
 
 
 # ---------------------------------------------------------------------------
