@@ -3,7 +3,7 @@ apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
   - role: control-plane
     extraPortMappings:
-      # Orchestrator API
+      # Orchestrator API + Dashboard
       - containerPort: 30080
         hostPort: 8000
         protocol: TCP
@@ -38,3 +38,6 @@ nodes:
       - containerPort: 30010
         hostPort: 6910
         protocol: TCP
+    extraMounts:
+      - hostPath: ./screenshots
+        containerPath: /data/screenshots

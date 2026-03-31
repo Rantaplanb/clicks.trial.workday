@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CUA Task Orchestrator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; color: #1e293b; }
+  a { color: #2563eb; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header { background: #0f172a; color: #f8fafc; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; font-weight: 600; letter-spacing: -.3px; }
+  header a { color: #94a3b8; font-size: 13px; }
+
+  .container { max-width: 1100px; margin: 24px auto; padding: 0 20px; }
+
+  /* ---- New task form ---- */
+  .new-task { background: #fff; border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 24px; display: flex; gap: 10px; align-items: end; }
+  .new-task .field { flex: 1; }
+  .new-task label { display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+  .new-task input { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; outline: none; }
+  .new-task input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,.15); }
+  .new-task .steps-field { width: 80px; flex: none; }
+  .new-task button { padding: 8px 20px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+  .new-task button:hover { background: #1d4ed8; }
+  .new-task button:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ---- Task table ---- */
+  .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+  td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+  .mono { font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 12px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  .badge-pending { background: #fef3c7; color: #92400e; }
+  .badge-running { background: #dbeafe; color: #1e40af; }
+  .badge-completed { background: #d1fae5; color: #065f46; }
+  .badge-failed { background: #fee2e2; color: #991b1b; }
+  .actions button { padding: 4px 10px; border: 1px solid #e2e8f0; background: #fff; border-radius: 4px; font-size: 12px; cursor: pointer; color: #64748b; }
+  .actions button:hover { background: #f1f5f9; color: #1e293b; }
+  .actions .del:hover { background: #fef2f2; color: #dc2626; border-color: #fca5a5; }
+  .empty { padding: 40px; text-align: center; color: #94a3b8; }
+
+  /* ---- Detail view ---- */
+  .detail { display: none; }
+  .detail.active { display: block; }
+  .list.hidden { display: none; }
+  .back { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #64748b; margin-bottom: 16px; cursor: pointer; }
+  .back:hover { color: #1e293b; }
+  .detail-header { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 16px; }
+  .detail-header h2 { font-size: 16px; margin-bottom: 8px; }
+  .detail-meta { display: flex; gap: 24px; flex-wrap: wrap; font-size: 13px; color: #64748b; margin-top: 10px; }
+  .detail-meta span { display: flex; align-items: center; gap: 4px; }
+  .vnc-link { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: #0f172a; color: #f8fafc; border-radius: 6px; font-size: 13px; font-weight: 500; margin-top: 12px; }
+  .vnc-link:hover { background: #1e293b; text-decoration: none; }
+
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .panels { grid-template-columns: 1fr; } }
+  .panel { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); overflow: hidden; }
+  .panel-title { padding: 10px 16px; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+  .log-box { height: 400px; overflow: auto; padding: 12px 16px; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; color: #334155; background: #fafbfc; }
+  .ss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; padding: 12px; max-height: 420px; overflow-y: auto; }
+  .ss-grid img { width: 100%; border-radius: 4px; border: 1px solid #e2e8f0; cursor: pointer; transition: transform .1s; }
+  .ss-grid img:hover { transform: scale(1.03); }
+  .ss-empty { padding: 40px; text-align: center; color: #94a3b8; font-size: 13px; }
+
+  /* ---- Lightbox ---- */
+  .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 100; align-items: center; justify-content: center; cursor: pointer; }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 95vw; max-height: 95vh; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CUA Task Orchestrator</h1>
+  <a href="/docs" target="_blank">API Docs</a>
+</header>
+
+<div class="container">
+  <!-- New task form -->
+  <form class="new-task" id="newTaskForm">
+    <div class="field">
+      <label>Task instruction</label>
+      <input type="text" id="msgInput" placeholder='e.g. "open chromium and google weather in SF"' required>
+    </div>
+    <div class="field steps-field">
+      <label>Max steps</label>
+      <input type="number" id="stepsInput" value="30" min="1" max="100">
+    </div>
+    <button type="submit" id="submitBtn">Run Task</button>
+  </form>
+
+  <!-- Task list -->
+  <div class="list" id="listView">
+    <div class="card">
+      <table>
+        <thead><tr><th>ID</th><th>Message</th><th>Status</th><th>Steps</th><th>Created</th><th></th></tr></thead>
+        <tbody id="taskTable"><tr><td colspan="6" class="empty">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Task detail -->
+  <div class="detail" id="detailView">
+    <div class="back" onclick="showList()">&larr; Back to tasks</div>
+    <div class="detail-header">
+      <h2 id="dMessage"></h2>
+      <span class="badge" id="dStatus"></span>
+      <div class="detail-meta">
+        <span id="dId" class="mono"></span>
+        <span id="dCreated"></span>
+        <span id="dResult"></span>
+      </div>
+      <a class="vnc-link" id="dVnc" href="#" target="_blank">View Desktop (VNC)</a>
+    </div>
+    <div class="panels">
+      <div class="panel">
+        <div class="panel-title">Runner Logs</div>
+        <div class="log-box" id="dLogs">Loading...</div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Screenshots</div>
+        <div id="dScreenshots" class="ss-empty">Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox for screenshot zoom -->
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('open')">
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let pollTimer = null;
+let detailTimer = null;
+
+// ---- API helpers ----
+const api = {
+  get:  url => fetch(url).then(r => r.ok ? r.json() : Promise.reject(r)),
+  post: (url, body) => fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r => r.ok ? r.json() : Promise.reject(r)),
+  del:  url => fetch(url, { method: 'DELETE' }).then(r => r.ok ? r.json() : Promise.reject(r)),
+  text: url => fetch(url).then(r => r.ok ? r.text() : '(no logs yet)'),
+};
+
+// ---- Time formatting ----
+function ago(iso) {
+  const d = new Date(iso);
+  const s = Math.floor((Date.now() - d) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return d.toLocaleDateString();
+}
+
+// ---- List view ----
+async function loadTasks() {
+  try {
+    const tasks = await api.get('/tasks');
+    const tbody = $('#taskTable');
+    if (!tasks.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No tasks yet. Submit one above.</td></tr>'; return; }
+    tbody.innerHTML = tasks.map(t => `
+      <tr>
+        <td class="mono">${t.id.slice(0,8)}</td>
+        <td>${esc(t.message)}</td>
+        <td><span class="badge badge-${t.status}">${t.status}</span></td>
+        <td>${t.steps ? t.steps.length : 0}</td>
+        <td>${ago(t.created_at)}</td>
+        <td class="actions">
+          <button onclick="showDetail('${t.id}')">View</button>
+          <button class="del" onclick="deleteTask('${t.id}')">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) { console.error(e); }
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function showList() {
+  location.hash = '';
+  $('#listView').classList.remove('hidden');
+  $('#detailView').classList.remove('active');
+  if (detailTimer) { clearInterval(detailTimer); detailTimer = null; }
+  loadTasks();
+}
+
+// ---- Detail view ----
+async function showDetail(taskId) {
+  location.hash = '#/task/' + taskId;
+  $('#listView').classList.add('hidden');
+  $('#detailView').classList.add('active');
+  if (detailTimer) clearInterval(detailTimer);
+
+  async function refresh() {
+    try {
+      const t = await api.get('/tasks/' + taskId);
+      $('#dMessage').textContent = t.message;
+      $('#dStatus').textContent = t.status;
+      $('#dStatus').className = 'badge badge-' + t.status;
+      $('#dId').textContent = t.id;
+      $('#dCreated').textContent = 'Created ' + ago(t.created_at);
+      $('#dResult').textContent = t.result ? 'Result: ' + t.result : '';
+      $('#dVnc').href = t.vnc_url || '#';
+      $('#dVnc').style.display = t.vnc_url ? '' : 'none';
+    } catch(e) {}
+
+    try {
+      const logs = await api.text('/tasks/' + taskId + '/logs?pod=runner');
+      const box = $('#dLogs');
+      const wasAtBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+      box.textContent = logs;
+      if (wasAtBottom) box.scrollTop = box.scrollHeight;
+    } catch(e) {}
+
+    try {
+      const shots = await api.get('/tasks/' + taskId + '/screenshots');
+      const el = $('#dScreenshots');
+      if (!shots.length) { el.className = 'ss-empty'; el.innerHTML = 'No screenshots yet.'; return; }
+      el.className = 'ss-grid';
+      el.innerHTML = shots.map(s =>
+        `<img src="${s.url}" alt="${s.name}" title="${s.name}" onclick="openLightbox('${s.url}')" loading="lazy">`
+      ).join('');
+    } catch(e) {}
+  }
+
+  refresh();
+  detailTimer = setInterval(refresh, 3000);
+}
+
+// ---- Lightbox ----
+function openLightbox(url) {
+  $('#lightboxImg').src = url;
+  $('#lightbox').classList.add('open');
+}
+
+// ---- Create task ----
+$('#newTaskForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = $('#submitBtn');
+  btn.disabled = true;
+  try {
+    const t = await api.post('/tasks', {
+      message: $('#msgInput').value,
+      max_steps: parseInt($('#stepsInput').value) || 30,
+    });
+    $('#msgInput').value = '';
+    showDetail(t.id);
+  } catch(err) { alert('Failed to create task'); }
+  btn.disabled = false;
+});
+
+// ---- Delete task ----
+async function deleteTask(taskId) {
+  if (!confirm('Delete this task and its pods?')) return;
+  await api.del('/tasks/' + taskId);
+  loadTasks();
+}
+
+// ---- Routing ----
+function route() {
+  const h = location.hash;
+  if (h.startsWith('#/task/')) showDetail(h.replace('#/task/', ''));
+  else showList();
+}
+
+window.addEventListener('hashchange', route);
+
+// ---- Init ----
+route();
+pollTimer = setInterval(() => {
+  if (!$('#detailView').classList.contains('active')) loadTasks();
+}, 5000);
+</script>
+</body>
+</html>

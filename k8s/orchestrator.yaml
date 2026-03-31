@@ -29,6 +29,8 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: screenshots
+              mountPath: /data/screenshots
           readinessProbe:
             httpGet:
               path: /health
@@ -38,6 +40,10 @@ spec:
       volumes:
         - name: data
           emptyDir: {}
+        - name: screenshots
+          hostPath:
+            path: /data/screenshots
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service

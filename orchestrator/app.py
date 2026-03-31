@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from kubernetes import client, config
 from pydantic import BaseModel
 
@@ -18,6 +20,9 @@ app = FastAPI(title="CUA Task Orchestrator")
 
 TASKS_DIR = Path(os.getenv("TASKS_DIR", "/data/tasks"))
 TASKS_DIR.mkdir(parents=True, exist_ok=True)
+
+SCREENSHOTS_DIR = Path(os.getenv("SCREENSHOTS_DIR", "/data/screenshots"))
+SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
 NAMESPACE = os.getenv("NAMESPACE", "default")
 TASK_RUNNER_IMAGE = os.getenv("TASK_RUNNER_IMAGE", "task-runner:latest")
@@ -94,7 +99,6 @@ def _load(task_id: str) -> dict:
 
 
 def _used_vnc_ports() -> set[int]:
-    """Return the set of VNC NodePorts currently allocated to tasks."""
     ports = set()
     for f in TASKS_DIR.glob("*.json"):
         task = json.loads(f.read_text())
@@ -104,7 +108,6 @@ def _used_vnc_ports() -> set[int]:
 
 
 def _allocate_vnc_port() -> int:
-    """Find the next free VNC NodePort."""
     used = _used_vnc_ports()
     for port in range(VNC_PORT_MIN, VNC_PORT_MAX + 1):
         if port not in used:
@@ -118,7 +121,6 @@ def _allocate_vnc_port() -> int:
 
 
 def _create_runner_pod(task_id: str, message: str, max_steps: int) -> str:
-    """Spin up a task-runner pod that will create its own webtop and run the agent."""
     pod_name = f"runner-{task_id[:8]}"
 
     pod = client.V1Pod(
@@ -160,9 +162,24 @@ def _create_runner_pod(task_id: str, message: str, max_steps: int) -> str:
                             ),
                         ),
                     ],
+                    volume_mounts=[
+                        client.V1VolumeMount(
+                            name="screenshots",
+                            mount_path="/screenshots",
+                        ),
+                    ],
                     resources=client.V1ResourceRequirements(
                         requests={"memory": "256Mi", "cpu": "100m"},
                         limits={"memory": "512Mi", "cpu": "500m"},
+                    ),
+                ),
+            ],
+            volumes=[
+                client.V1Volume(
+                    name="screenshots",
+                    host_path=client.V1HostPathVolumeSource(
+                        path="/data/screenshots",
+                        type="DirectoryOrCreate",
                     ),
                 ),
             ],
@@ -174,7 +191,6 @@ def _create_runner_pod(task_id: str, message: str, max_steps: int) -> str:
 
 
 def _create_vnc_service(task_id: str, node_port: int) -> str:
-    """Create a NodePort Service exposing the webtop's VNC port."""
     svc_name = f"vnc-{task_id[:8]}"
 
     svc = client.V1Service(
@@ -209,7 +225,17 @@ def _delete_resource_safe(delete_fn, name: str):
 
 
 # ---------------------------------------------------------------------------
-# API
+# API — Dashboard
+# ---------------------------------------------------------------------------
+
+
+@app.get("/")
+def dashboard():
+    return FileResponse("/app/static/index.html")
+
+
+# ---------------------------------------------------------------------------
+# API — Tasks
 # ---------------------------------------------------------------------------
 
 
@@ -228,8 +254,6 @@ def create_task(req: TaskCreate):
     webtop_pod = f"webtop-{task_id[:8]}"
     vnc_svc = f"vnc-{task_id[:8]}"
 
-    # Create the VNC service (webtop pod will match the selector once the
-    # task-runner creates it)
     _create_vnc_service(task_id, vnc_port)
 
     task = {
@@ -282,3 +306,47 @@ def delete_task(task_id: str):
         _delete_resource_safe(k8s.delete_namespaced_service, task["vnc_svc"])
     (TASKS_DIR / f"{task_id}.json").unlink(missing_ok=True)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# API — Logs
+# ---------------------------------------------------------------------------
+
+
+@app.get("/tasks/{task_id}/logs")
+def get_logs(task_id: str, pod: str = "runner"):
+    task = _load(task_id)
+    pod_name = task["runner_pod"] if pod == "runner" else task["webtop_pod"]
+    container = "runner" if pod == "runner" else "webtop"
+    try:
+        logs = k8s.read_namespaced_pod_log(
+            pod_name, NAMESPACE, container=container, tail_lines=1000
+        )
+        return PlainTextResponse(logs)
+    except client.exceptions.ApiException as e:
+        raise HTTPException(e.status or 500, f"Failed to fetch logs: {e.reason}")
+
+
+# ---------------------------------------------------------------------------
+# API — Screenshots
+# ---------------------------------------------------------------------------
+
+
+@app.get("/tasks/{task_id}/screenshots")
+def list_screenshots(task_id: str):
+    ss_dir = SCREENSHOTS_DIR / task_id
+    if not ss_dir.exists():
+        return []
+    files = sorted(ss_dir.glob("*.png"))
+    return [
+        {"name": f.name, "url": f"/screenshots/{task_id}/{f.name}"}
+        for f in files
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Static file mounts (order matters — must come after route definitions)
+# ---------------------------------------------------------------------------
+
+app.mount("/screenshots", StaticFiles(directory=str(SCREENSHOTS_DIR)), name="screenshots")
+app.mount("/static", StaticFiles(directory="/app/static"), name="static")

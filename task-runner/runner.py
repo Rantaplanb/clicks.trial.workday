@@ -7,6 +7,7 @@ import base64
 import os
 import sys
 import time
+from pathlib import Path
 
 import requests
 from kubernetes import client, config
@@ -26,6 +27,7 @@ MAX_STEPS = int(os.environ.get("MAX_STEPS", "30"))
 
 DISPLAY = ":1"
 WEBTOP_POD = f"webtop-{TASK_ID[:8]}"
+SCREENSHOTS_DIR = Path("/screenshots") / TASK_ID
 
 SYSTEM_PROMPT = """\
 You are a desktop operator. You complete tasks by controlling a Linux desktop \
@@ -125,6 +127,19 @@ def create_webtop_pod():
                         client.V1EnvVar(name="PUID", value="1000"),
                         client.V1EnvVar(name="PGID", value="1000"),
                         client.V1EnvVar(name="TZ", value="Etc/UTC"),
+                        # View-only: disable interactive features
+                        client.V1EnvVar(
+                            name="SELKIES_ENABLE_VIEW_ONLY_LINK", value="true"
+                        ),
+                        client.V1EnvVar(
+                            name="SELKIES_CLIPBOARD_ENABLED", value="false"
+                        ),
+                        client.V1EnvVar(
+                            name="SELKIES_FILE_TRANSFERS", value="none"
+                        ),
+                        client.V1EnvVar(
+                            name="SELKIES_GAMEPAD_ENABLED", value="false"
+                        ),
                     ],
                     ports=[
                         client.V1ContainerPort(container_port=3000, name="vnc"),
@@ -198,12 +213,20 @@ def _exec(cmd: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def capture_screenshot() -> bytes:
-    """Take a screenshot, return raw PNG bytes."""
+def capture_screenshot(step: int) -> bytes:
+    """Take a screenshot, save to disk, return raw PNG bytes."""
     b64_str = _exec(
         f"DISPLAY={DISPLAY} import -window root png:- | base64 -w0"
     )
-    return base64.b64decode(b64_str.strip())
+    png_bytes = base64.b64decode(b64_str.strip())
+
+    # Save to shared hostPath volume -> appears on host filesystem
+    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    path = SCREENSHOTS_DIR / f"step_{step:02d}.png"
+    path.write_bytes(png_bytes)
+    print(f"    screenshot saved: {path} ({len(png_bytes):,} bytes)")
+
+    return png_bytes
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +329,7 @@ def run_agent():
     print(f"\n{'='*60}")
     print(f"[agent] Task: {TASK_MESSAGE}")
     print(f"[agent] Max steps: {MAX_STEPS}")
+    print(f"[agent] Screenshots: {SCREENSHOTS_DIR}")
     print(f"{'='*60}\n")
 
     t0 = time.time()
@@ -323,7 +347,6 @@ def run_agent():
             (i for i in response.output if i.type == "computer_call"), None
         )
         if computer_call is None:
-            # Done — extract final text
             final = ""
             for item in response.output:
                 if hasattr(item, "content"):
@@ -342,9 +365,8 @@ def run_agent():
         handle_actions(actions)
         time.sleep(1)
 
-        screenshot_bytes = capture_screenshot()
+        screenshot_bytes = capture_screenshot(step + 1)
         screenshot_b64 = base64.b64encode(screenshot_bytes).decode()
-        print(f"    screenshot: {len(screenshot_bytes):,} bytes")
 
         steps_log.append({"step": step + 1, "actions": action_types})
 
